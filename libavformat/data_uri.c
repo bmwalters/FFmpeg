@@ -23,14 +23,31 @@
 #include "libavutil/avutil.h"
 #include "libavutil/base64.h"
 #include "libavutil/mem.h"
+#include "libavutil/opt.h"
 #include "url.h"
 
 typedef struct {
+    const AVClass *class;
     const uint8_t *data;
     void *tofree;
+    char *mime_type;
     size_t size;
     size_t pos;
 } DataContext;
+
+#define OFFSET(x) offsetof(DataContext, x)
+
+static const AVOption data_options[] = {
+    { "mime_type", "export the MIME type", OFFSET(mime_type), AV_OPT_TYPE_STRING, { .str = NULL }, 0, 0, AV_OPT_FLAG_EXPORT | AV_OPT_FLAG_READONLY },
+    { NULL }
+};
+
+static const AVClass data_context_class = {
+    .class_name = "data",
+    .item_name  = av_default_item_name,
+    .option     = data_options,
+    .version    = LIBAVUTIL_VERSION_INT,
+};
 
 static av_cold int data_open(URLContext *h, const char *uri, int flags)
 {
@@ -59,6 +76,9 @@ static av_cold int data_open(URLContext *h, const char *uri, int flags)
             }
             av_log(h, AV_LOG_VERBOSE, "Content-type: %.*s\n",
                    (int)(next - opt), opt);
+            dc->mime_type = av_strndup(opt, next - opt);
+            if (!dc->mime_type)
+                return AVERROR(ENOMEM);
         } else {
             if (!av_strncasecmp(opt, "base64", next - opt)) {
                 base64 = 1;
@@ -112,9 +132,10 @@ static int data_read(URLContext *h, unsigned char *buf, int size)
 }
 
 const URLProtocol ff_data_protocol = {
-    .name           = "data",
-    .url_open       = data_open,
-    .url_close      = data_close,
-    .url_read       = data_read,
-    .priv_data_size = sizeof(DataContext),
+    .name            = "data",
+    .url_open        = data_open,
+    .url_close       = data_close,
+    .url_read        = data_read,
+    .priv_data_size  = sizeof(DataContext),
+    .priv_data_class = &data_context_class,
 };
